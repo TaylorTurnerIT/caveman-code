@@ -6,29 +6,31 @@ class Cave < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/JuliusBrussee/caveman-cli/releases/download/v#{version}/cave-darwin-arm64"
-      sha256 "PLACEHOLDER"
+      url "https://github.com/JuliusBrussee/caveman-cli/releases/download/v#{version}/cave-darwin-arm64.tar.gz"
+      sha256 "PLACEHOLDER_DARWIN_ARM64"
     end
     on_intel do
-      url "https://github.com/JuliusBrussee/caveman-cli/releases/download/v#{version}/cave-darwin-x64"
-      sha256 "PLACEHOLDER"
+      url "https://github.com/JuliusBrussee/caveman-cli/releases/download/v#{version}/cave-darwin-x64.tar.gz"
+      sha256 "PLACEHOLDER_DARWIN_X64"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/JuliusBrussee/caveman-cli/releases/download/v#{version}/cave-linux-arm64"
-      sha256 "PLACEHOLDER"
+      url "https://github.com/JuliusBrussee/caveman-cli/releases/download/v#{version}/cave-linux-arm64.tar.gz"
+      sha256 "PLACEHOLDER_LINUX_ARM64"
     end
     on_intel do
-      url "https://github.com/JuliusBrussee/caveman-cli/releases/download/v#{version}/cave-linux-x64"
-      sha256 "PLACEHOLDER"
+      url "https://github.com/JuliusBrussee/caveman-cli/releases/download/v#{version}/cave-linux-x64.tar.gz"
+      sha256 "PLACEHOLDER_LINUX_X64"
     end
   end
 
   def install
-    binary = stable.url.split("/").last
-    bin.install binary => "cave"
+    # cave resolves theme/, export-html/, photon_rs_bg.wasm, etc. relative to
+    # dirname(process.execPath), so the binary and companions must live together.
+    libexec.install Dir["*"]
+    bin.write_exec_script libexec/"cave"
   end
 
   test do

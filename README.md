@@ -25,7 +25,20 @@ Full coding capability. Fraction of the cost. <a href="research/README.md">Prove
 > **[Full eval methodology + reproduce every number →](research/README.md)**
 
 ```bash
-npm install -g cave && cave
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/JuliusBrussee/caveman-cli/main/install.sh | sh
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/JuliusBrussee/caveman-cli/main/install.ps1 | iex
+
+# Homebrew
+brew tap juliusbrussee/cave https://github.com/JuliusBrussee/caveman-cli && brew install cave
+
+# npm (any platform with Node 20+)
+npm install -g cave
+
+# Docker
+docker run --rm -it -v "$PWD:/work" ghcr.io/juliusbrussee/caveman-cli:latest
 ```
 
 <p align="center">

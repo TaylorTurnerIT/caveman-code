@@ -1,0 +1,81 @@
+name: Smoke install
+
+# Builds the host-platform tarball and runs the installer against it for every PR
+# that touches the install pipeline. The release workflow has its own smoke job
+# (see build-binaries.yml) that runs on tag pushes against the real release artifacts.
+
+on:
+  pull_request:
+    paths:
+      - install.sh
+      - install.ps1
+      - Formula/cave.rb
+      - scripts/build-binaries.sh
+      - scripts/update-homebrew.sh
+      - Dockerfile
+      - .github/workflows/build-binaries.yml
+      - .github/workflows/smoke-install.yml
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triple: linux-x64
+          - os: macos-latest
+            triple: darwin-arm64
+          - os: windows-latest
+            triple: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.20
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build host tarball
+        shell: bash
+        run: ./scripts/build-binaries.sh --platform ${{ matrix.triple }}
+
+      - name: Serve archives locally
+        shell: bash
+        run: |
+          cd packages/coding-agent/binaries
+          python3 -m http.server 8000 >/tmp/http.log 2>&1 &
+          echo $! > /tmp/http.pid
+          sleep 2
+
+      - name: Run unix installer
+        if: matrix.triple != 'windows-x64'
+        shell: bash
+        env:
+          CAVE_VERSION: smoke
+          CAVE_BASE_URL: http://localhost:8000
+          CAVE_PREFIX: ${{ runner.temp }}/cave-smoke
+        run: |
+          bash install.sh
+          "$CAVE_PREFIX/bin/cave" --version
+
+      - name: Run windows installer
+        if: matrix.triple == 'windows-x64'
+        shell: pwsh
+        env:
+          CAVE_VERSION: smoke
+          CAVE_BASE_URL: http://localhost:8000
+          CAVE_PREFIX: ${{ runner.temp }}\cave-smoke
+        run: |
+          pwsh -File install.ps1
+          & "$env:CAVE_PREFIX\bin\cave.cmd" --version
+
+      - name: Stop http server
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/http.pid ]; then kill "$(cat /tmp/http.pid)" 2>/dev/null || true; fi
