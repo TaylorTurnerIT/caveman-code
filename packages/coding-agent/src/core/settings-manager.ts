@@ -91,6 +91,21 @@ export interface UpdateSettings {
  */
 export type HooksSettings = Record<string, unknown>;
 
+/**
+ * Status line settings — Claude Code v2.1.119-compatible.
+ *
+ * Schema source of truth: https://code.claude.com/docs/en/statusline
+ * (settings.json `statusLine` key).
+ *
+ * Shape:
+ *   { type: "command" | "default" | "detailed", command?: string, padding?: number }
+ *
+ * Typed as `Record<string, unknown>` to avoid a settings ↔ tui import cycle
+ * and to forward-compat unknown fields. Use
+ * `parseStatusLineSettings` from `@cave/tui` to validate before consumption.
+ */
+export type StatusLineSettings = Record<string, unknown>;
+
 export type TransportSetting = Transport;
 
 /**
@@ -153,6 +168,11 @@ export interface Settings {
 	hooks?: HooksSettings;
 	/** When true, all hooks are skipped regardless of `hooks` content. */
 	disableAllHooks?: boolean;
+	/**
+	 * Claude Code-compatible status line config (WS10). See
+	 * `parseStatusLineSettings` in `@cave/tui` for the validated shape.
+	 */
+	statusLine?: StatusLineSettings;
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -1224,5 +1244,27 @@ export class SettingsManager {
 		this.globalSettings.disableAllHooks = disabled;
 		this.markModified("disableAllHooks");
 		this.save();
+	}
+
+	// =========================================================================
+	// Status line (WS10) — Claude Code-compatible statusLine config
+	// =========================================================================
+
+	/** Merged `statusLine` block (project overrides global). May be undefined. */
+	getStatusLine(): StatusLineSettings | undefined {
+		return this.settings.statusLine;
+	}
+
+	setGlobalStatusLine(statusLine: StatusLineSettings | undefined): void {
+		this.globalSettings.statusLine = statusLine;
+		this.markModified("statusLine");
+		this.save();
+	}
+
+	setProjectStatusLine(statusLine: StatusLineSettings | undefined): void {
+		const projectSettings = structuredClone(this.projectSettings);
+		projectSettings.statusLine = statusLine;
+		this.markProjectModified("statusLine");
+		this.saveProjectSettings(projectSettings);
 	}
 }

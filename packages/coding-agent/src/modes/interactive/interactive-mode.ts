@@ -20,6 +20,9 @@ import type {
 	OverlayOptions,
 	SidePanelOptions,
 	SlashCommand,
+	StatusLineContext,
+	StatusLineRenderer,
+	StatusLineResult,
 } from "@cave/tui";
 import {
 	CombinedAutocompleteProvider,
@@ -30,6 +33,7 @@ import {
 	Markdown,
 	matchesKey,
 	ProcessTerminal,
+	renderStatusLineDefault,
 	Spacer,
 	setKeybindings,
 	Text,
@@ -182,6 +186,11 @@ export class InteractiveMode {
 	// Status line tracking (for mutating immediately-sequential status updates)
 	private lastStatusSpacer: Spacer | undefined = undefined;
 	private lastStatusText: Text | undefined = undefined;
+
+	// WS10: Claude-Code-compatible statusLine renderer. Lazily built on first
+	// read so we don't pay the cost when the user has not configured one.
+	private statusLineRenderer: StatusLineRenderer | undefined;
+	private statusLineRendererBuilt = false;
 
 	// Streaming message tracking
 	private streamingComponent: AssistantMessageComponent | undefined = undefined;
@@ -5062,5 +5071,40 @@ export class InteractiveMode {
 			this.ui.stop();
 			this.isInitialized = false;
 		}
+	}
+
+	/**
+	 * WS10: Resolve the configured status line for the current session. Builds
+	 * the renderer lazily on first call. The renderer honors Claude Code's
+	 * `statusLine` schema (default | detailed | command). Returns the resolved
+	 * text + provenance so callers can surface "command-failed" in /doctor.
+	 *
+	 * The TUI footer is intentionally untouched here — this method is the
+	 * single hook that future footer/extension wiring can call. Keeping the
+	 * change minimal avoids stepping on WS6/WS19 surface in interactive-mode.
+	 */
+	async resolveStatusLine(): Promise<StatusLineResult> {
+		const { createStatusLineRenderer } = await import("../../core/status-line-runner.js");
+		if (!this.statusLineRendererBuilt) {
+			this.statusLineRenderer = createStatusLineRenderer(this.settingsManager.getStatusLine());
+			this.statusLineRendererBuilt = true;
+		}
+		const cwd = this.sessionManager.getCwd();
+		const modelId = this.session.model?.id ?? "";
+		const ctx: StatusLineContext = {
+			hook_event_name: "Status",
+			session_id: this.session.sessionId,
+			cwd,
+			model: { id: modelId, display_name: modelId },
+			workspace: { current_dir: cwd, project_dir: cwd },
+			cave: {
+				queuedMessages: this.compactionQueuedMessages?.length ?? 0,
+			},
+		};
+		const renderer = this.statusLineRenderer;
+		if (!renderer) {
+			return { text: renderStatusLineDefault(ctx), source: "default" };
+		}
+		return renderer.render(ctx);
 	}
 }

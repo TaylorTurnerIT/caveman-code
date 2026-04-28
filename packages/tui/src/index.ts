@@ -8,14 +8,63 @@ export {
 	CombinedAutocompleteProvider,
 	type SlashCommand,
 } from "./autocomplete.js";
+// Color depth emission
+export { type ColorDepth, detectColorDepth, hexToSgr, resetColorDepthCache, sgrReset } from "./color-depth.js";
 // Components
 export { Box } from "./components/box.js";
+// Chapters (auto-folded transcript intent groups)
+export {
+	type Chapter,
+	detectIntent,
+	groupTurnsIntoChapters,
+	type Intent,
+	intentLabel,
+	type Turn,
+	toggleChapter,
+} from "./components/Chapters.js";
 export { CancellableLoader } from "./components/cancellable-loader.js";
+// Diff view (side-by-side ≥ 100 cols)
+export {
+	type DiffLayout,
+	type DiffLine,
+	type DiffLineKind,
+	DiffView,
+	type DiffViewOptions,
+	type DiffViewTheme,
+	pairUpHunks,
+	pickLayout,
+	SIDE_BY_SIDE_MIN_WIDTH,
+} from "./components/DiffView.js";
 export { Editor, type EditorOptions, type EditorTheme } from "./components/editor.js";
 export { Image, type ImageOptions, type ImageTheme } from "./components/image.js";
 export { Input } from "./components/input.js";
 export { Loader } from "./components/loader.js";
 export { type DefaultTextStyle, Markdown, type MarkdownTheme } from "./components/markdown.js";
+// Status line (Claude Code v2.1.119 schema)
+export {
+	parseStatusLineSettings,
+	renderDefault as renderStatusLineDefault,
+	renderDetailed as renderStatusLineDetailed,
+	renderStatusLineSync,
+	StatusLine,
+	type StatusLineComponentTheme,
+	type StatusLineContext,
+	type StatusLineRenderer,
+	type StatusLineResult,
+	type StatusLineSettings,
+	sanitizeOneLine,
+	tailPath,
+} from "./components/StatusLine.js";
+// Subagent observability overlay (Hermes pattern, F2)
+export {
+	formatElapsed,
+	NULL_SUBAGENT_REGISTRY,
+	SubagentOverlay,
+	type SubagentOverlayOptions,
+	type SubagentOverlayTheme,
+	type SubagentRegistry,
+	type SubagentSnapshot,
+} from "./components/SubagentOverlay.js";
 export {
 	type SelectItem,
 	SelectList,
@@ -57,12 +106,23 @@ export {
 	parseKey,
 	setKittyProtocolActive,
 } from "./keys.js";
-// Input buffering for batch splitting
-export { StdinBuffer, type StdinBufferEventMap, type StdinBufferOptions } from "./stdin-buffer.js";
-// Color depth emission
-export { type ColorDepth, detectColorDepth, hexToSgr, resetColorDepthCache, sgrReset } from "./color-depth.js";
+// OSC-52 clipboard write
+export { encodeOsc52, OSC52_MAX_BYTES, writeOsc52 } from "./osc52.js";
 // Scroll buffer (in-app scrollback)
 export { ScrollBuffer, type ScrollBufferOptions, type ScrollMode } from "./scroll-buffer.js";
+// Input buffering for batch splitting
+export { StdinBuffer, type StdinBufferEventMap, type StdinBufferOptions } from "./stdin-buffer.js";
+// Synchronized output (DEC private mode 2026)
+export {
+	classifySyncOutputSupport,
+	emitSyncOutputBegin,
+	emitSyncOutputEnd,
+	SYNC_OUTPUT_BEGIN,
+	SYNC_OUTPUT_END,
+	type SyncOutputCapabilityInput,
+	type SyncOutputSupport,
+	wrapSyncOutput,
+} from "./sync-output.js";
 // Terminal interface and implementations
 export { ProcessTerminal, type Terminal } from "./terminal.js";
 // Terminal identity + background detection
@@ -70,8 +130,8 @@ export {
 	type BackgroundClassification,
 	detectTerminalIdentity,
 	type Multiplexer,
-	probeTerminal,
 	type ProbeResult,
+	probeTerminal,
 	queryOsc11Standalone,
 	queryTerminalBackground,
 	relativeLuminance,
