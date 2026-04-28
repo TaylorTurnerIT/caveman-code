@@ -1,0 +1,361 @@
+openapi: 3.0.3
+info:
+  title: Cave Daemon API
+  version: 0.1.0
+  description: |
+    HTTP + WebSocket API for the cave daemon (`cave serve`). Multi-client
+    attach for headless coding agent sessions. Sessions are persisted in
+    SQLite (`~/.cave/daemon/sessions.db`) and survive process restarts and
+    SSH drops.
+
+    Provenance: opencode (sst/opencode, MIT) inspired the daemon-with-attach
+    pattern; Codex app-server (Apache-2.0) inspired JSON-RPC over WebSocket
+    for low-latency token streaming. No `pi-code` upstream equivalent was
+    found — built from scratch in cave.
+servers:
+  - url: http://127.0.0.1:7421
+    description: Local daemon (default)
+security:
+  - bearerAuth: []
+paths:
+  /v1/health:
+    get:
+      summary: Liveness probe
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/sessions:
+    get:
+      summary: List sessions
+      operationId: listSessions
+      parameters:
+        - in: query
+          name: state
+          required: false
+          schema:
+            $ref: "#/components/schemas/SessionState"
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SessionSummary"
+    post:
+      summary: Create a new session
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+  /v1/sessions/{id}:
+    get:
+      summary: Get session by id
+      operationId: getSession
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete session
+      operationId: deleteSession
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "204":
+          description: deleted
+  /v1/sessions/{id}/messages:
+    post:
+      summary: Send a user message into a session (queue for processing)
+      operationId: sendMessage
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+      responses:
+        "202":
+          description: queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /v1/sessions/{id}/transcript:
+    get:
+      summary: Get full transcript (text snapshot, not the raw model messages)
+      operationId: getTranscript
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcript"
+  /v1/workers:
+    get:
+      summary: List registered remote workers (for `&prompt` handoff)
+      operationId: listWorkers
+      responses:
+        "200":
+          description: list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workers]
+                properties:
+                  workers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Worker"
+    post:
+      summary: Register a remote cave worker
+      operationId: registerWorker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterWorkerRequest"
+      responses:
+        "201":
+          description: registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+  /v1/workers/{name}:
+    delete:
+      summary: Unregister a worker
+      operationId: removeWorker
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: removed
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  parameters:
+    SessionId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    NotFound:
+      description: not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Health:
+      type: object
+      required: [ok, version, uptimeSec]
+      properties:
+        ok:
+          type: boolean
+        version:
+          type: string
+        uptimeSec:
+          type: integer
+    SessionState:
+      type: string
+      enum: [idle, running, stopped, error]
+    Session:
+      type: object
+      required: [id, createdAt, updatedAt, state, cwd]
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        state:
+          $ref: "#/components/schemas/SessionState"
+        cwd:
+          type: string
+        title:
+          type: string
+        model:
+          type: string
+        worker:
+          type: string
+          description: |
+            If non-empty, this session was dispatched to a remote worker via
+            the `&prompt` cloud-handoff syntax.
+    SessionSummary:
+      type: object
+      required: [id, createdAt, updatedAt, state]
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        state:
+          $ref: "#/components/schemas/SessionState"
+        title:
+          type: string
+        worker:
+          type: string
+    CreateSessionRequest:
+      type: object
+      properties:
+        cwd:
+          type: string
+        title:
+          type: string
+        model:
+          type: string
+        worker:
+          type: string
+          description: optional worker name to dispatch this session to
+    SendMessageRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+        worker:
+          type: string
+    MessageEnvelope:
+      type: object
+      required: [id, sessionId, role, text, createdAt]
+      properties:
+        id:
+          type: string
+        sessionId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant, system, tool]
+        text:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Transcript:
+      type: object
+      required: [sessionId, messages]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageEnvelope"
+    Worker:
+      type: object
+      required: [name, url, registeredAt]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        registeredAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    RegisterWorkerRequest:
+      type: object
+      required: [name, url]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        token:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+# WebSocket endpoint (out-of-band of OpenAPI; documented for SDK):
+#   ws://127.0.0.1:<port>/v1/sessions/{id}/stream
+# JSON-RPC 2.0 framed messages:
+#   notifications: { method: "token", params: { sessionId, text, role } }
+#                  { method: "tool", params: { sessionId, name, status } }
+#                  { method: "state", params: { sessionId, state } }
+#                  { method: "done",  params: { sessionId } }
+#   requests:      { method: "send", params: { text } } → { result: { id } }
+#                  { method: "interrupt", params: {} } → { result: { ok: true } }

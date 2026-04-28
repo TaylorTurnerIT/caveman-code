@@ -48,6 +48,10 @@ import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
 import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.js";
 import { initTheme, setDetectedBackground, stopThemeWatcher } from "./modes/interactive/theme/theme.js";
 import { handleMcpCommand } from "./cli/mcp-cli.js";
+import { handleAttachCommand } from "./cli/attach.js";
+import { handleListCommand } from "./cli/list.js";
+import { handleServeCommand } from "./cli/serve.js";
+import { handleWorkerCommand } from "./cli/worker.js";
 import { runOnboarding, shouldRunOnboarding } from "./onboarding/wizard.js";
 import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.js";
 import { isLocalPath } from "./utils/paths.js";
@@ -519,6 +523,26 @@ export async function main(args: string[]) {
 
 	// WS2: `cave mcp <subcmd>` and `cave mcp-server`
 	if (await handleMcpCommand(args)) {
+		return;
+	}
+
+	// WS9: daemon + multi-client attach.
+	//   cave serve [--port N]      — boot the daemon
+	//   cave sessions (alias `ps`) — list daemon sessions (`cave list` is
+	//                                already used by the extensions package
+	//                                manager; `sessions` is the WS9 canonical)
+	//   cave attach <id>           — attach to a session over WS
+	//   cave worker {register,...} — manage remote-worker registry for &-prefix handoff
+	if (await handleServeCommand(args)) {
+		return;
+	}
+	if (await handleListCommand(args)) {
+		return;
+	}
+	if (await handleAttachCommand(args)) {
+		return;
+	}
+	if (await handleWorkerCommand(args)) {
 		return;
 	}
 
