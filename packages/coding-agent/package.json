@@ -28,6 +28,7 @@
 		"examples",
 		"commands",
 		"skills",
+		"agents",
 		"CHANGELOG.md"
 	],
 	"scripts": {

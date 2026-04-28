@@ -1,0 +1,300 @@
+/**
+ * Agent definition loader — discovers `.cave/agents/<name>.md` (project) and
+ * `~/.cave/agents/<name>.md` (user) and parses their Claude Code-compatible
+ * frontmatter into `SubagentDef` records.
+ *
+ * Provenance:
+ *   - Pi-check found `pi-coding-agent`'s `examples/extensions/subagent/agents.ts`
+ *     which already does directory discovery + frontmatter parsing for a
+ *     reduced agent shape (name + description + tools + model + body). This
+ *     file extends that pattern with the full WS6 frontmatter superset
+ *     (permissionMode, isolation, mcpServers, hooks, maxTurns, skills,
+ *     effort, background, disallowedTools).
+ *   - Discovery pattern mirrors WS5's skills/commands loaders so users
+ *     experience consistent location semantics.
+ *
+ * Discovery (in order; later entries override earlier on name collision):
+ *   1. Bundled defaults: `<package>/agents/*.md` (this repo's defaults)
+ *   2. User scope:       `~/.cave/agents/*.md`
+ *   3. Project scope:    `<cwd>/.cave/agents/*.md`
+ *
+ * Frontmatter (Claude Code v2.1.119 superset — see SubagentDef in @cave/agent):
+ *   description, prompt (body), tools, disallowedTools, model, permissionMode,
+ *   mcpServers, hooks, maxTurns, skills, effort, background, isolation
+ *
+ * Output:
+ *   - `LoadedAgentDef[]`  — successful definitions
+ *   - `ResourceDiagnostic[]` — warnings / failures
+ */
+
+import { normalizeFrontmatterArray, type SubagentDef, validateSubagentDef } from "@cave/agent";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { homedir } from "os";
+import { basename, join, resolve } from "path";
+import { CONFIG_DIR_NAME, getAgentDir, getPackageDir } from "../../config.js";
+import { parseFrontmatter } from "../../utils/frontmatter.js";
+// note: from src/core/agent-defs/loader.ts → ../../ → src/ → config.ts
+import type { ResourceDiagnostic } from "../diagnostics.js";
+import { createSyntheticSourceInfo, type SourceInfo } from "../source-info.js";
+
+/** Loaded agent definition with source info. */
+export interface LoadedAgentDef {
+	def: SubagentDef;
+	sourceInfo: SourceInfo;
+}
+
+export interface LoadAgentDefsOptions {
+	/** Project working directory (search root for `.cave/agents/`). Defaults to process.cwd(). */
+	cwd?: string;
+	/** User config dir override (test injection). Defaults to `getAgentDir()`. */
+	userDir?: string;
+	/** Package dir override (for bundled defaults). Defaults to `getPackageDir()`. */
+	packageDir?: string;
+	/** Skip bundled defaults — useful for tests. */
+	skipBundled?: boolean;
+	/** Skip user scope — useful for tests. */
+	skipUser?: boolean;
+	/** Skip project scope — useful for tests. */
+	skipProject?: boolean;
+	/** Extra directories to scan (e.g. plugin-supplied). Loaded in order, after project. */
+	extraDirs?: string[];
+}
+
+export interface LoadAgentDefsResult {
+	agents: LoadedAgentDef[];
+	diagnostics: ResourceDiagnostic[];
+}
+
+interface ScanResult {
+	defs: LoadedAgentDef[];
+	diagnostics: ResourceDiagnostic[];
+}
+
+const FRONTMATTER_KEYS_PASSTHROUGH = [
+	"effort",
+	"context",
+	"agent",
+	"hooks",
+	"paths",
+	"shell",
+	"argument-hint",
+	"arguments",
+	"user-invocable",
+	"disable-model-invocation",
+] as const;
+
+/**
+ * Parse a single `.md` file into a SubagentDef + diagnostics.
+ *
+ * Returns `null` for the def if the file is unparseable / fails validation.
+ */
+export function parseAgentDefFile(
+	filePath: string,
+	source: SubagentDef["source"],
+): {
+	def: SubagentDef | null;
+	diagnostics: ResourceDiagnostic[];
+} {
+	const diagnostics: ResourceDiagnostic[] = [];
+	let content: string;
+	try {
+		content = readFileSync(filePath, "utf-8");
+	} catch (err) {
+		diagnostics.push({
+			type: "error",
+			path: filePath,
+			message: `failed to read agent def: ${(err as Error).message}`,
+		});
+		return { def: null, diagnostics };
+	}
+
+	const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(content);
+	const fileName = basename(filePath, ".md");
+	const name = (typeof frontmatter.name === "string" && frontmatter.name) || fileName;
+	const description = typeof frontmatter.description === "string" ? frontmatter.description : "";
+
+	const tools = normalizeFrontmatterArray(frontmatter.tools);
+	const disallowedTools = normalizeFrontmatterArray(frontmatter.disallowedTools);
+	const mcpServers = normalizeFrontmatterArray(frontmatter.mcpServers);
+	const skills = normalizeFrontmatterArray(frontmatter.skills);
+
+	const def: SubagentDef = {
+		name,
+		description,
+		prompt: body,
+		tools,
+		disallowedTools,
+		model: typeof frontmatter.model === "string" ? frontmatter.model : undefined,
+		effort: typeof frontmatter.effort === "string" ? frontmatter.effort : undefined,
+		permissionMode: frontmatter.permissionMode as SubagentDef["permissionMode"],
+		isolation: frontmatter.isolation as SubagentDef["isolation"],
+		mcpServers,
+		skills,
+		hooks: (frontmatter.hooks ?? undefined) as Record<string, unknown> | undefined,
+		maxTurns: typeof frontmatter.maxTurns === "number" ? frontmatter.maxTurns : undefined,
+		background: typeof frontmatter.background === "boolean" ? frontmatter.background : undefined,
+		source,
+		filePath,
+	};
+
+	// Pass through unknown CC keys verbatim so a user pasting
+	// `~/.claude/agents/foo.md` keeps every field even if cave doesn't yet
+	// wire it.
+	for (const key of FRONTMATTER_KEYS_PASSTHROUGH) {
+		if (key in frontmatter && !(key in def)) {
+			(def as any)[key] = frontmatter[key];
+		}
+	}
+	for (const key of Object.keys(frontmatter)) {
+		if (
+			!(key in def) &&
+			!FRONTMATTER_KEYS_PASSTHROUGH.includes(key as (typeof FRONTMATTER_KEYS_PASSTHROUGH)[number])
+		) {
+			(def as any)[key] = frontmatter[key];
+		}
+	}
+
+	const errors = validateSubagentDef(def);
+	if (errors.length > 0) {
+		for (const err of errors) {
+			diagnostics.push({ type: "warning", path: filePath, message: err });
+		}
+		// We still return the def if it has at least name+description+prompt
+		// — some validation errors (e.g. permissionMode value) are non-fatal.
+		const fatal =
+			errors.some((e) => e.startsWith("name is required")) ||
+			errors.some((e) => e.startsWith("description is required")) ||
+			errors.some((e) => e.startsWith("prompt body is required"));
+		if (fatal) return { def: null, diagnostics };
+	}
+
+	return { def, diagnostics };
+}
+
+function scanDir(dir: string, source: SubagentDef["source"]): ScanResult {
+	const defs: LoadedAgentDef[] = [];
+	const diagnostics: ResourceDiagnostic[] = [];
+
+	if (!existsSync(dir)) return { defs, diagnostics };
+
+	let entries: string[];
+	try {
+		entries = readdirSync(dir);
+	} catch (err) {
+		diagnostics.push({
+			type: "error",
+			path: dir,
+			message: `failed to read agents dir: ${(err as Error).message}`,
+		});
+		return { defs, diagnostics };
+	}
+
+	for (const entry of entries) {
+		if (!entry.endsWith(".md")) continue;
+		const filePath = join(dir, entry);
+		try {
+			const stat = statSync(filePath);
+			if (!stat.isFile()) continue;
+		} catch {
+			continue;
+		}
+
+		const { def, diagnostics: parseDiagnostics } = parseAgentDefFile(filePath, source);
+		diagnostics.push(...parseDiagnostics);
+		if (!def) continue;
+
+		const scope = source === "project" ? "project" : source === "user" ? "user" : "temporary";
+		const sourceInfo = createSyntheticSourceInfo(filePath, {
+			source: source === "builtin" ? "builtin" : source === "plugin" ? "plugin" : "local",
+			scope,
+			baseDir: dir,
+		});
+
+		defs.push({ def, sourceInfo });
+	}
+
+	return { defs, diagnostics };
+}
+
+/**
+ * Load agent definitions from all scopes per discovery rules.
+ *
+ * Later scopes override earlier on name collision (project > user > builtin).
+ */
+export function loadAgentDefs(options: LoadAgentDefsOptions = {}): LoadAgentDefsResult {
+	const cwd = options.cwd ?? process.cwd();
+	const userBase = options.userDir ?? getAgentDir();
+	const packageBase = options.packageDir ?? getPackageDir();
+
+	const all: LoadedAgentDef[] = [];
+	const diagnostics: ResourceDiagnostic[] = [];
+	const byName = new Map<string, LoadedAgentDef>();
+
+	const merge = (results: ScanResult) => {
+		diagnostics.push(...results.diagnostics);
+		for (const d of results.defs) {
+			byName.set(d.def.name, d);
+		}
+	};
+
+	// 1. Bundled defaults — package/agents/
+	if (!options.skipBundled) {
+		const bundledDir = join(packageBase, "agents");
+		merge(scanDir(bundledDir, "builtin"));
+	}
+
+	// 2. User scope — ~/.cave/agents/ (CC-compatible alias: ~/.claude/agents/)
+	if (!options.skipUser) {
+		merge(scanDir(join(userBase, "agents"), "user"));
+	}
+
+	// 3. Project scope — <cwd>/.cave/agents/
+	if (!options.skipProject) {
+		merge(scanDir(join(cwd, CONFIG_DIR_NAME, "agents"), "project"));
+	}
+
+	// 4. Plugin / extra dirs
+	if (options.extraDirs && options.extraDirs.length > 0) {
+		for (const dir of options.extraDirs) {
+			merge(scanDir(resolve(dir), "plugin"));
+		}
+	}
+
+	for (const def of byName.values()) all.push(def);
+
+	return { agents: all, diagnostics };
+}
+
+/**
+ * Lookup helper used by the Task / Agent tools.
+ */
+export function findAgentDef(loaded: LoadAgentDefsResult, name: string): LoadedAgentDef | undefined {
+	return loaded.agents.find((a) => a.def.name === name);
+}
+
+/**
+ * Format a list of available agents for error / "agent not found" messages.
+ */
+export function formatAgentList(loaded: LoadAgentDefsResult, max = 8): string {
+	if (loaded.agents.length === 0) return "(no agents loaded)";
+	const lines = loaded.agents.slice(0, max).map((a) => `  - ${a.def.name} (${a.def.source}): ${a.def.description}`);
+	if (loaded.agents.length > max) {
+		lines.push(`  - … +${loaded.agents.length - max} more`);
+	}
+	return lines.join("\n");
+}
+
+/** Resolve the bundled agents dir relative to the cave package root. */
+export function getBundledAgentsDir(): string {
+	return join(getPackageDir(), "agents");
+}
+
+/** Resolve the user's agents dir (`~/.cave/agents/`). */
+export function getUserAgentsDir(): string {
+	return join(getAgentDir(), "agents");
+}
+
+/** Resolve the project's agents dir (`<cwd>/.cave/agents/`). */
+export function getProjectAgentsDir(cwd: string): string {
+	return join(cwd, CONFIG_DIR_NAME, "agents");
+}

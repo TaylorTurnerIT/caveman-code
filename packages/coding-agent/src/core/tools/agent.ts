@@ -1,0 +1,85 @@
+/**
+ * `Agent` built-in tool — simpler single-shot wrapper around the Task tool.
+ *
+ * Where Task is the fan-out/chain orchestrator, Agent is "run one named
+ * agent on this task" — useful for skills and slash commands that always
+ * invoke exactly one agent. The implementation delegates to Task's `single`
+ * mode so behaviour stays identical.
+ *
+ * Provenance: thin shim over the WS6 Task tool. Same provenance as task.ts.
+ */
+
+import type { spawn } from "node:child_process";
+import type { SubagentResult } from "@cave/agent";
+import { Text } from "@cave/tui";
+import { type Static, Type } from "@sinclair/typebox";
+import type { ToolDefinition } from "../extensions/types.js";
+import { createTaskToolDefinition, type TaskToolOptions } from "./task.js";
+
+const AgentSchema = Type.Object({
+	agent: Type.String({ description: "Name of the agent to invoke (must exist in .cave/agents/)" }),
+	task: Type.String({ description: "Task description handed to the agent" }),
+	cwd: Type.Optional(Type.String({ description: "Override working directory" })),
+});
+
+export type AgentToolInput = Static<typeof AgentSchema>;
+
+export interface AgentToolDetails {
+	result: SubagentResult;
+}
+
+export interface AgentToolOptions extends TaskToolOptions {}
+
+export function createAgentToolDefinition(
+	cwd: string,
+	options?: AgentToolOptions,
+): ToolDefinition<typeof AgentSchema, AgentToolDetails | undefined> {
+	const taskTool = createTaskToolDefinition(cwd, options);
+	return {
+		name: "agent",
+		label: "Agent",
+		description: [
+			"Invoke a single named subagent on a task.",
+			"For multi-agent fan-out, use the `task` tool's parallel/chain modes instead.",
+			"Subagent definitions live at `.cave/agents/<name>.md`.",
+		].join(" "),
+		promptSnippet: "Run one named subagent",
+		parameters: AgentSchema,
+		async execute(id, params: AgentToolInput, signal, _onUpdate, ctx) {
+			// Delegate to Task's single mode.
+			const taskResult = await taskTool.execute(
+				id,
+				{ agent: params.agent, task: params.task, cwd: params.cwd },
+				signal,
+				undefined,
+				ctx as any,
+			);
+			const details = (taskResult.details as { mode: string; results: SubagentResult[] } | undefined) ?? undefined;
+			const single = details?.results[0];
+			return {
+				content: taskResult.content,
+				details: single ? { result: single } : undefined,
+			};
+		},
+		renderCall(args, theme) {
+			let text = theme.fg("toolTitle", theme.bold("agent "));
+			text += theme.fg("accent", args.agent || "...");
+			if (args.task) text += theme.fg("dim", ` ${args.task.slice(0, 60)}`);
+			return new Text(text, 0, 0);
+		},
+		renderResult(result, _opt, theme) {
+			const details = result.details as AgentToolDetails | undefined;
+			if (!details) {
+				const c = result.content[0];
+				return new Text(c?.type === "text" ? c.text : "(no output)", 0, 0);
+			}
+			const r = details.result;
+			const icon = r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
+			return new Text(`${icon} ${theme.fg("accent", r.agent)} ${theme.fg("dim", r.output.slice(0, 200))}`, 0, 0);
+		},
+	};
+}
+
+export const agentToolDefinition = createAgentToolDefinition(process.cwd());
+
+export { AgentSchema };

@@ -81,6 +81,23 @@ export {
 	writeTool,
 	writeToolDefinition,
 } from "./write.js";
+// WS6: Subagents & Plan Mode
+export {
+	createTaskToolDefinition,
+	taskToolDefinition,
+	TaskSchema,
+	type TaskToolInput,
+	type TaskToolDetails,
+	type TaskToolOptions,
+} from "./task.js";
+export {
+	createAgentToolDefinition,
+	agentToolDefinition,
+	AgentSchema,
+	type AgentToolInput,
+	type AgentToolDetails,
+	type AgentToolOptions,
+} from "./agent.js";
 
 import type { AgentTool } from "@cave/agent";
 import type { ToolDefinition } from "../extensions/types.js";
