@@ -8,6 +8,8 @@ export {
 	CombinedAutocompleteProvider,
 	type SlashCommand,
 } from "./autocomplete.js";
+// Chord (multi-key sequence) matcher — sits on top of KeybindingsManager
+export { type ChordResult, type ChordSegment, ChordSession, parseChord } from "./chord.js";
 // Color depth emission
 export { type ColorDepth, detectColorDepth, hexToSgr, resetColorDepthCache, sgrReset } from "./color-depth.js";
 // Components
@@ -101,10 +103,6 @@ export {
 	setKeybindings,
 	TUI_KEYBINDINGS,
 } from "./keybindings.js";
-// Chord (multi-key sequence) matcher — sits on top of KeybindingsManager
-export { type ChordResult, type ChordSegment, ChordSession, parseChord } from "./chord.js";
-// Terminal notifications (OSC 9 + bell)
-export { bell, notify, type NotifyOptions } from "./notifications.js";
 // Keyboard input handling
 export {
 	decodeKittyPrintable,
@@ -118,6 +116,8 @@ export {
 	parseKey,
 	setKittyProtocolActive,
 } from "./keys.js";
+// Terminal notifications (OSC 9 + bell)
+export { bell, type NotifyOptions, notify } from "./notifications.js";
 // OSC-52 clipboard write
 export { encodeOsc52, OSC52_MAX_BYTES, writeOsc52 } from "./osc52.js";
 // Scroll buffer (in-app scrollback)

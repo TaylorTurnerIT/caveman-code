@@ -19,8 +19,8 @@
  * ```
  */
 
-import { matchesKey } from "./keys.js";
 import type { Keybinding, KeybindingsManager } from "./keybindings.js";
+import { matchesKey } from "./keys.js";
 
 export type ChordSegment = string; // a single key id like "ctrl+x"
 

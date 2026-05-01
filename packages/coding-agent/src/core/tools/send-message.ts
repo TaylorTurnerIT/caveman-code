@@ -54,11 +54,10 @@ export const sendMessageToolDefinition: ToolDefinition<typeof SendMessageSchema,
 		const inboxPath = dir ? join(dir, "inbox.jsonl") : "";
 		if (inboxPath) {
 			if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-			appendFileSync(
-				inboxPath,
-				`${JSON.stringify({ ts: Date.now(), message: params.message })}\n`,
-				{ encoding: "utf-8", mode: 0o600 },
-			);
+			appendFileSync(inboxPath, `${JSON.stringify({ ts: Date.now(), message: params.message })}\n`, {
+				encoding: "utf-8",
+				mode: 0o600,
+			});
 		}
 		const text = entry
 			? delivered
@@ -87,7 +86,8 @@ export type TaskStatusInput = Static<typeof TaskStatusSchema>;
 export const taskStatusToolDefinition: ToolDefinition<typeof TaskStatusSchema, undefined> = {
 	name: "task_status",
 	label: "TaskStatus",
-	description: "List all background subagents launched in this parent session: id, name, status, exit code, output file.",
+	description:
+		"List all background subagents launched in this parent session: id, name, status, exit code, output file.",
 	promptSnippet: "List in-flight background subagents (their agentIds, output files, statuses)",
 	parameters: TaskStatusSchema,
 	async execute() {

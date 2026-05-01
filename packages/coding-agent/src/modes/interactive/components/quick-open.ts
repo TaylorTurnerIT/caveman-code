@@ -150,19 +150,12 @@ export class QuickOpenComponent extends Container {
 		const visible = this.filtered.slice(0, this.maxVisible);
 		for (let i = 0; i < visible.length; i++) {
 			const path = visible[i];
-			const text =
-				i === this.selectedIndex
-					? theme.fg("accent", `▸ ${path}`)
-					: theme.fg("toolOutput", `  ${path}`);
+			const text = i === this.selectedIndex ? theme.fg("accent", `▸ ${path}`) : theme.fg("toolOutput", `  ${path}`);
 			this.listContainer.addChild(new Text(text, 1, 0));
 		}
 		if (this.filtered.length > this.maxVisible) {
 			this.listContainer.addChild(
-				new Text(
-					theme.fg("dim", `  … ${this.filtered.length - this.maxVisible} more`),
-					1,
-					0,
-				),
+				new Text(theme.fg("dim", `  … ${this.filtered.length - this.maxVisible} more`), 1, 0),
 			);
 		}
 	}
