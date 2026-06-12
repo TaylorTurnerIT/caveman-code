@@ -82,6 +82,8 @@ const PROVIDER_MODEL_PAIRS: ProviderModelPair[] = [
 	},
 	// xAI
 	{ provider: "xai", model: "grok-code-fast-1", label: "xai-grok-code-fast-1" },
+	// DeepSeek
+	{ provider: "deepseek", model: "deepseek-chat", label: "deepseek-chat" },
 	// Cerebras
 	{ provider: "cerebras", model: "zai-glm-4.7", label: "cerebras-zai-glm-4.7" },
 	// Groq

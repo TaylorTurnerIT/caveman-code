@@ -332,6 +332,22 @@ describe("Context overflow error handling", () => {
 	});
 
 	// =============================================================================
+	// DeepSeek
+	// Expected pattern: context length exceeded
+	// =============================================================================
+
+	describe.skipIf(!process.env.DEEPSEEK_API_KEY)("DeepSeek", () => {
+		it("deepseek-chat - should detect overflow via isContextOverflow", async () => {
+			const model = getModel("deepseek", "deepseek-chat");
+			const result = await testContextOverflow(model, process.env.DEEPSEEK_API_KEY!);
+			logResult(result);
+
+			expect(result.stopReason).toBe("error");
+			expect(isContextOverflow(result.response, model.contextWindow)).toBe(true);
+		}, 120000);
+	});
+
+	// =============================================================================
 	// Groq
 	// Expected pattern: "reduce the length of the messages"
 	// =============================================================================
@@ -354,8 +370,8 @@ describe("Context overflow error handling", () => {
 	// =============================================================================
 
 	describe.skipIf(!process.env.CEREBRAS_API_KEY)("Cerebras", () => {
-		it("qwen-3-235b - should detect overflow via isContextOverflow", async () => {
-			const model = getModel("cerebras", "llama3.1-8b");
+		it("gpt-oss-120b - should detect overflow via isContextOverflow", async () => {
+			const model = getModel("cerebras", "gpt-oss-120b");
 			const result = await testContextOverflow(model, process.env.CEREBRAS_API_KEY!);
 			logResult(result);
 

@@ -126,6 +126,7 @@ export function getEnvApiKey(provider: any): string | undefined {
 		opencode: "OPENCODE_API_KEY",
 		"opencode-go": "OPENCODE_API_KEY",
 		"kimi-coding": "KIMI_API_KEY",
+		deepseek: "DEEPSEEK_API_KEY",
 	};
 
 	const envVar = envMap[provider];
@@ -150,6 +151,7 @@ export const ENV_VAR_BY_PROVIDER: Record<string, string> = {
 	opencode: "OPENCODE_API_KEY",
 	"opencode-go": "OPENCODE_API_KEY",
 	"kimi-coding": "KIMI_API_KEY",
+	deepseek: "DEEPSEEK_API_KEY",
 };
 
 const OAUTH_PROVIDERS = new Set([
